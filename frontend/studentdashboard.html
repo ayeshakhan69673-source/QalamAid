@@ -362,6 +362,9 @@ function renderDashboard(d, isOffline) {
     const remaining = Math.max(needed - raised, 0);
     const percent   = needed > 0 ? Math.min(Math.round((raised / needed) * 100), 100) : 0;
     const hasApplication = Boolean(d.applicationId || d.submittedAt || d.applicationStatus || needed > 0);
+    const isActuallyFunded = hasApplication && needed > 0 && raised >= needed;
+    const studentStatus = d.studentStatus === 'funded' && !isActuallyFunded ? 'verified' : d.studentStatus;
+    const applicationStatus = d.applicationStatus === 'funded' && !isActuallyFunded ? 'verified' : d.applicationStatus;
 
     /* Status config */
     const STATUS = {
@@ -376,11 +379,11 @@ function renderDashboard(d, isOffline) {
         funded:   { cls:'funded',   icon:'🎉', title:'Fully Funded — Congratulations!',
                     msg:'Your semester fee has been fully funded! The university will receive the payment directly via Easypaisa.' }
     };
-    const sc = hasApplication ? (STATUS[d.studentStatus] || STATUS.pending) : STATUS.notApplied;
+    const sc = hasApplication ? (STATUS[studentStatus] || STATUS.pending) : STATUS.notApplied;
 
     /* Timeline step states */
-    const isVerified = hasApplication && ['verified','funded'].includes(d.studentStatus);
-    const isFunded   = hasApplication && d.studentStatus === 'funded';
+    const isVerified = hasApplication && ['verified','funded'].includes(studentStatus);
+    const isFunded   = isActuallyFunded;
 
     document.getElementById('mainContent').innerHTML = `
 
@@ -490,16 +493,16 @@ function renderDashboard(d, isOffline) {
                 <div class="pf">
                     <label>Application Status</label>
                     <p>
-                        <span class="badge ${d.applicationStatus === 'verified' ? 'green' : d.applicationStatus === 'rejected' ? 'red' : 'amber'}">
-                            ${hasApplication ? (d.applicationStatus || 'pending') : 'not submitted'}
+                        <span class="badge ${applicationStatus === 'verified' ? 'green' : applicationStatus === 'funded' ? 'blue' : applicationStatus === 'rejected' ? 'red' : 'amber'}">
+                            ${hasApplication ? (applicationStatus || 'pending') : 'not submitted'}
                         </span>
                     </p>
                 </div>
                 <div class="pf">
                     <label>Student Status</label>
                     <p>
-                        <span class="badge ${d.studentStatus === 'verified' ? 'green' : d.studentStatus === 'funded' ? 'blue' : d.studentStatus === 'rejected' ? 'red' : 'amber'}">
-                            ${d.studentStatus || 'pending'}
+                        <span class="badge ${studentStatus === 'verified' ? 'green' : studentStatus === 'funded' ? 'blue' : studentStatus === 'rejected' ? 'red' : 'amber'}">
+                            ${studentStatus || 'pending'}
                         </span>
                     </p>
                 </div>

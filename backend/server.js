@@ -204,6 +204,12 @@ function getBaseUrl() {
     return process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
 }
 
+function parseMoney(value) {
+    const cleaned = String(value ?? '').replace(/[^0-9.-]/g, '');
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : 0;
+}
+
 function escapeHtml(s) {
     return String(s ?? '')
         .replace(/&/g, '&amp;')
@@ -1237,7 +1243,9 @@ app.post('/api/sandbox/payment-success', async (req, res) => {
                  WHERE a.id = ? GROUP BY a.id`,
                 [appId]
             );
-            if (appData.length > 0 && appData[0].raised >= appData[0].amount_needed) {
+            const needed = appData.length > 0 ? parseMoney(appData[0].amount_needed) : 0;
+            const raised = appData.length > 0 ? parseMoney(appData[0].raised) : 0;
+            if (needed > 0 && raised >= needed) {
                 await db.query(`UPDATE applications SET status = 'funded' WHERE id = ?`, [appId]);
                 await db.query(
                     `UPDATE students SET status = 'funded'
@@ -1280,7 +1288,17 @@ app.get('/api/student-dashboard', async (req, res) => {
             LIMIT 1
         `, [email]);
         if (rows.length === 0) return res.status(404).json({ message: 'Student not found' });
-        res.json(rows[0]);
+
+        const dashboard = rows[0];
+        const needed = parseMoney(dashboard.amountNeeded);
+        const raised = parseMoney(dashboard.amountRaised);
+        const isActuallyFunded = needed > 0 && raised >= needed;
+        if (!isActuallyFunded) {
+            if (dashboard.studentStatus === 'funded') dashboard.studentStatus = 'verified';
+            if (dashboard.applicationStatus === 'funded') dashboard.applicationStatus = 'verified';
+        }
+
+        res.json(dashboard);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -1403,8 +1421,8 @@ async function markFundedIfGoalMet(applicationId) {
         [applicationId]
     );
     if (appData.length === 0) return;
-    const needed = parseFloat(appData[0].amount_needed) || 0;
-    const raised = parseFloat(appData[0].raised) || 0;
+    const needed = parseMoney(appData[0].amount_needed);
+    const raised = parseMoney(appData[0].raised);
     if (needed > 0 && raised >= needed) {
         await db.query(`UPDATE applications SET status = 'funded' WHERE id = ?`, [applicationId]);
         await db.query(
