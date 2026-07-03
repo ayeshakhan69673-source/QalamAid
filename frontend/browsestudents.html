@@ -256,21 +256,37 @@
     <script>
         let allStudents = [];
 
+        function text(value) {
+            return String(value ?? '').trim();
+        }
+
+        function lower(value) {
+            return text(value).toLowerCase();
+        }
+
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = text(value);
+            return div.innerHTML;
+        }
+
         // Load students from backend
         async function loadStudents() {
             try {
                 const res  = await fetch(`${window.QALAM_API_BASE}/api/students`);
-                const data = await res.json();
+                const data = await res.json().catch(() => []);
+                if (!res.ok) throw new Error(data.message || 'Could not load students');
+                if (!Array.isArray(data)) throw new Error('Server returned an invalid students list');
                 allStudents = data;
-                renderStudents(allStudents);
+                filterStudents();
             } catch (err) {
                 document.getElementById('studentGrid').innerHTML = `
                     <div class="error-msg-box" style="grid-column:span 3;">
                         <h3>❌ Cannot connect to server</h3>
-                        <p>Make sure your backend is running.</p>
-                        <p>Go to VS Code terminal and run: <strong>node server.js</strong></p>
+                        <p>${escapeHtml(err.message || 'Make sure your backend is running.')}</p>
                     </div>
                 `;
+                document.getElementById('resultsCount').innerText = '0 students found';
             }
         }
 
@@ -293,33 +309,41 @@
             count.innerText = `${students.length} verified student${students.length > 1 ? 's' : ''} found`;
 
             grid.innerHTML = students.map(s => {
-                const initials   = s.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                const name       = text(s.name) || 'Student';
+                const university = text(s.university_name) || 'University not listed';
+                const department = text(s.department);
+                const semester   = text(s.semester);
+                const priority   = text(s.priority_level);
+                const reason     = text(s.reason);
+                const initials   = name.split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'S';
                 const raised     = Number(s.amount_raised) || 0;
                 const needed     = Number(s.amount_needed) || 1;
                 const percent    = Math.min(Math.round((raised / needed) * 100), 100);
-                const isHighPrio = s.priority_level && (
-                    s.priority_level.includes('1st') || s.priority_level.includes('2nd')
+                const isHighPrio = priority && (
+                    priority.includes('1st') || priority.includes('2nd')
                 );
-                const shortReason = s.reason
-                    ? (s.reason.length > 80 ? s.reason.slice(0, 80) + '...' : s.reason)
+                const shortReason = reason
+                    ? (reason.length > 80 ? reason.slice(0, 80) + '...' : reason)
                     : 'Financial hardship — needs support to continue education.';
 
+                const firstName = name.split(/\s+/)[0] || 'student';
+
                 return `
-                    <div class="student-card" data-name="${s.name.toLowerCase()}" data-uni="${s.university_name.toLowerCase()}" data-priority="${s.priority_level || ''}">
-                        <div class="avatar">${initials}</div>
+                    <div class="student-card">
+                        <div class="avatar">${escapeHtml(initials)}</div>
                         <div class="verified-badge">✅ University Verified</div>
-                        <h3>${s.name}</h3>
-                        <div class="university">${s.university_name}</div>
-                        <div class="dept">${s.department || ''} ${s.semester ? '· ' + s.semester : ''}</div>
-                        ${s.priority_level ? `<div class="priority-badge ${isHighPrio ? 'high' : ''}">${s.priority_level}</div>` : ''}
-                        <div class="reason">${shortReason}</div>
+                        <h3>${escapeHtml(name)}</h3>
+                        <div class="university">${escapeHtml(university)}</div>
+                        <div class="dept">${escapeHtml(department)} ${semester ? '· ' + escapeHtml(semester) : ''}</div>
+                        ${priority ? `<div class="priority-badge ${isHighPrio ? 'high' : ''}">${escapeHtml(priority)}</div>` : ''}
+                        <div class="reason">${escapeHtml(shortReason)}</div>
                         <div class="fee-info">Fee needed: <span>PKR ${Number(s.amount_needed).toLocaleString()}</span></div>
                         <div class="progress-bar">
                             <div class="progress" style="width:${percent}%"></div>
                         </div>
                         <div class="progress-text">PKR ${raised.toLocaleString()} raised of PKR ${needed.toLocaleString()} (${percent}%)</div>
-                        <button class="donate-btn" onclick="donateToStudent(${s.application_id}, '${s.name}', ${s.amount_needed})">
-                            Donate to ${s.name.split(' ')[0]}
+                        <button class="donate-btn" onclick="donateToStudent(${Number(s.application_id)}, ${JSON.stringify(name)}, ${Number(s.amount_needed) || 0})">
+                            Donate to ${escapeHtml(firstName)}
                         </button>
                     </div>
                 `;
@@ -328,15 +352,17 @@
 
         // Search and filter
         function filterStudents() {
-            const search   = document.getElementById('searchInput').value.toLowerCase();
-            const priority = document.getElementById('priorityFilter').value.toLowerCase();
+            const search   = lower(document.getElementById('searchInput').value);
+            const priority = lower(document.getElementById('priorityFilter').value);
 
             const filtered = allStudents.filter(s => {
                 const matchSearch = !search ||
-                    s.name.toLowerCase().includes(search) ||
-                    s.university_name.toLowerCase().includes(search);
+                    lower(s.name).includes(search) ||
+                    lower(s.university_name).includes(search) ||
+                    lower(s.department).includes(search) ||
+                    lower(s.priority_level).includes(search);
                 const matchPriority = !priority ||
-                    (s.priority_level && s.priority_level.toLowerCase().includes(priority));
+                    lower(s.priority_level).includes(priority);
                 return matchSearch && matchPriority;
             });
 
