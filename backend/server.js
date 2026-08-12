@@ -686,38 +686,6 @@ async function sendEmail(to, subject, html, options = {}) {
         if (throwOnError) throw err;
         return { sent: false, error: err.message };
     }
-
-    const { user, pass } = getEmailCredentials();
-    const useApi = shouldUseGmailApi();
-
-    if (useApi) {
-        if (!user) {
-            const msg = 'EMAIL_USER is required for Gmail API';
-            console.log(`📧 Email skipped → To: ${to} | Subject: ${subject}`);
-            if (throwOnError) throw new Error(msg);
-            return { sent: false, error: msg };
-        }
-    } else if (!user || !pass || pass === 'your_16_char_app_password') {
-        const msg = 'Email not configured (set EMAIL_USER and EMAIL_PASS in .env)';
-        console.log(`📧 Email skipped → To: ${to} | Subject: ${subject}`);
-        if (throwOnError) throw new Error(msg);
-        return { sent: false, error: msg };
-    }
-
-    try {
-        if (useApi) {
-            await sendEmailViaGmailApi(to, subject, html, attachments);
-            console.log(`✅ Email sent via Gmail API to ${to}` + (attachments.length ? ` (${attachments.length} attachment(s))` : ''));
-        } else {
-            await sendEmailViaSmtp(to, subject, html, attachments);
-            console.log(`✅ Email sent via Gmail SMTP to ${to}` + (attachments.length ? ` (${attachments.length} attachment(s))` : ''));
-        }
-        return { sent: true };
-    } catch (err) {
-        console.log(`⚠️ Email failed: ${err.message}`);
-        if (throwOnError) throw err;
-        return { sent: false, error: err.message };
-    }
 }
 
 function buildUniversityVerificationHtml(data) {
@@ -1964,41 +1932,56 @@ if (FRONTEND_DIR) {
     });
 }
 
-// ── Start server ─────────────────────────────────────────────
-async function startServer() {
+// ── Start server (Vercel-compatible) ──────────────────────────
+// On Vercel, the app is exported and never calls app.listen() —
+// Vercel's runtime handles incoming requests as serverless functions.
+// Locally (and on Railway), we still run a normal listening server.
+
+async function initApp() {
     try {
         await ensureDocumentsTable();
         console.log('✅ application_documents table ready');
     } catch (err) {
         console.error('❌ Could not ensure application_documents table:', err.message || err);
         console.error('   DB host:', process.env.DB_HOST || process.env.MYSQLHOST || '(not set)');
-        process.exit(1);
+        // Don't kill the process on Vercel — a crashed function is worse than a logged error
+        if (!process.env.VERCEL) process.exit(1);
     }
 
-    app.listen(process.env.PORT, async () => {
-        console.log(`✅ Server running on port ${process.env.PORT}`);
-        const check = await verifyMailConnection();
-        if (check.ok && check.provider === 'mailjet') {
-            console.log(`Email configured: Yes (Mailjet Send API for ${getMailjetConfig().fromEmail})`);
-        } else if (check.ok && check.provider === 'gmail-api') {
-            console.log(`📧 Email configured: Yes (Gmail API over HTTPS for ${getEmailCredentials().user})`);
-        } else if (check.ok) {
-            console.log(`📧 Email configured: Yes (Gmail SMTP for ${getEmailCredentials().user})`);
-        } else if (isRailwayDeploy() && !isGmailApiConfigured()) {
-            console.log(`📧 Email configured: SMTP blocked on Railway Hobby/Free (${check.error})`);
-            console.log('   → Railway blocks ports 465/587. Use Gmail API (HTTPS) or upgrade to Pro for SMTP.');
-            console.log('   → Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN on Railway.');
-        } else if (getEmailCredentials().user) {
-            console.log(`📧 Email configured: Yes, but verify failed: ${check.error}`);
-            if (check.provider === 'gmail-api') {
-                console.log('   → Check GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN on Railway.');
-            } else {
-                console.log('   → Use a Gmail App Password (Google Account → Security → App passwords).');
-            }
+    const check = await verifyMailConnection();
+    if (check.ok && check.provider === 'mailjet') {
+        console.log(`Email configured: Yes (Mailjet Send API for ${getMailjetConfig().fromEmail})`);
+    } else if (check.ok && check.provider === 'gmail-api') {
+        console.log(`Email configured: Yes (Gmail API over HTTPS for ${getEmailCredentials().user})`);
+    } else if (check.ok) {
+        console.log(`Email configured: Yes (Gmail SMTP for ${getEmailCredentials().user})`);
+    } else if (isRailwayDeploy() && !isGmailApiConfigured()) {
+        console.log(`Email configured: SMTP blocked on Railway Hobby/Free (${check.error})`);
+        console.log('   → Railway blocks ports 465/587. Use Gmail API (HTTPS) or upgrade to Pro for SMTP.');
+        console.log('   → Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN on Railway.');
+    } else if (getEmailCredentials().user) {
+        console.log(`Email configured: Yes, but verify failed: ${check.error}`);
+        if (check.provider === 'gmail-api') {
+            console.log('   → Check GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN on Railway.');
         } else {
-            console.log('📧 Email configured: No — set EMAIL_USER and EMAIL_PASS in backend/.env');
+            console.log('   → Use a Gmail App Password (Google Account → Security → App passwords).');
         }
+    } else {
+        console.log('Email configured: No — set EMAIL_USER and EMAIL_PASS in backend/.env');
+    }
+}
+
+if (process.env.VERCEL) {
+    // Serverless: init runs once per cold start, no long-running listener
+    initApp();
+} else {
+    // Local development or Railway: run a normal persistent server
+    const PORT = process.env.PORT || 5000;
+    initApp().then(() => {
+        app.listen(PORT, () => {
+            console.log(`✅ Server running on port ${PORT}`);
+        });
     });
 }
 
-startServer();
+module.exports = app;
