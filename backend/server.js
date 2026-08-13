@@ -1186,6 +1186,54 @@ app.post('/api/donate', async (req, res) => {
     }
 });
 
+// ── Contact form ─────────────────────────────────────────────
+app.post('/api/contact', async (req, res) => {
+    const { name, email, subject, message } = req.body;
+
+    if (!name || !email || !message) {
+        return res.status(400).json({ message: 'Name, email, and message are required.' });
+    }
+
+    try {
+        await db.query(
+            `INSERT INTO contact_messages (name, email, subject, message)
+             VALUES (?, ?, ?, ?)`,
+            [name, email, subject || '(No subject)', message]
+        );
+
+        await sendEmail(
+            'aidqalam@gmail.com',
+            `New Contact Message: ${subject || '(No subject)'}`,
+            `
+            <div style="font-family:Arial;max-width:600px;margin:auto;">
+                <h2 style="color:#065f46;">New Contact Form Submission</h2>
+                <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+                    <tr style="background:#f0fdf4;">
+                        <td style="padding:10px;border:1px solid #ddd;font-weight:bold;">Name</td>
+                        <td style="padding:10px;border:1px solid #ddd;">${name}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:10px;border:1px solid #ddd;font-weight:bold;">Email</td>
+                        <td style="padding:10px;border:1px solid #ddd;">${email}</td>
+                    </tr>
+                    <tr style="background:#f0fdf4;">
+                        <td style="padding:10px;border:1px solid #ddd;font-weight:bold;">Subject</td>
+                        <td style="padding:10px;border:1px solid #ddd;">${subject || '(No subject)'}</td>
+                    </tr>
+                </table>
+                <p style="font-weight:bold;">Message:</p>
+                <p style="white-space:pre-wrap;background:#f8fafc;padding:12px;border-radius:8px;">${message}</p>
+            </div>
+            `
+        );
+
+        res.json({ message: 'Message sent! We will get back to you soon.' });
+    } catch (err) {
+        console.error('CONTACT ERROR:', err.message);
+        res.status(500).json({ message: 'Something went wrong: ' + err.message });
+    }
+});
+
 // ── Sandbox payment success callback ───────────────────────
 app.post('/api/sandbox/payment-success', async (req, res) => {
     const { reference, amount, txnId } = req.body;
