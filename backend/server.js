@@ -11,12 +11,16 @@ if (typeof dns.setDefaultResultOrder === 'function') {
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const db         = require('./db');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config({ override: false });
 
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// AI (Gemini) client for the scholarship assistant chatbot
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Create uploads folder automatically
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -1230,6 +1234,29 @@ app.post('/api/contact', async (req, res) => {
         res.json({ message: 'Message sent! We will get back to you soon.' });
     } catch (err) {
         console.error('CONTACT ERROR:', err.message);
+        res.status(500).json({ message: 'Something went wrong: ' + err.message });
+    }
+});
+
+// ── Scholarship assistant chatbot ────────────────────────────
+app.post('/api/chatbot', async (req, res) => {
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+        return res.status(400).json({ message: 'Message is required.' });
+    }
+
+    try {
+        const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
+
+        const systemPrompt = `You are the scholarship assistant for Qalam Aid, a platform connecting verified Pakistani students with donors, with payments routed via Easypaisa. Help users understand how to apply for a scholarship, how university verification works, how donations work, and general questions about the platform. Be concise, warm, and clear. If you don't know something specific about a user's own application, tell them to check their dashboard or contact support.`;
+
+        const result = await model.generateContent(`${systemPrompt}\n\nUser: ${message}`);
+        const reply = result.response.text();
+
+        res.json({ reply });
+    } catch (err) {
+        console.error('CHATBOT ERROR:', err.message);
         res.status(500).json({ message: 'Something went wrong: ' + err.message });
     }
 });
