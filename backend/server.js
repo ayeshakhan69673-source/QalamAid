@@ -2046,9 +2046,20 @@ async function initApp() {
     }
 }
 
+let vercelInitPromise = null;
+
 if (process.env.VERCEL) {
-    // Serverless: init runs once per cold start, no long-running listener
-    initApp();
+    // Serverless: kick off init on cold start, but don't block module export.
+    // Any request that arrives before init finishes awaits the same promise
+    // via the middleware below, instead of racing the DB connection.
+    vercelInitPromise = initApp().catch((err) => {
+        console.error('initApp failed on cold start:', err.message || err);
+    });
+
+    app.use((req, res, next) => {
+        if (!vercelInitPromise) return next();
+        vercelInitPromise.then(() => next());
+    });
 } else {
     // Local development or Railway: run a normal persistent server
     const PORT = process.env.PORT || 5000;
@@ -2060,3 +2071,6 @@ if (process.env.VERCEL) {
 }
 
 module.exports = app;
+module.exports.config = {
+    maxDuration: 30
+};
