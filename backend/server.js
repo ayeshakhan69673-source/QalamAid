@@ -84,10 +84,15 @@ function resolveUploadPath(filename) {
 }
 
 async function ensureDocumentsTable() {
+    const [existing] = await db.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'application_documents' LIMIT 1"
+    );
+    if (existing.length > 0) return;
+
     await db.query(`
-        CREATE TABLE IF NOT EXISTS application_documents (
+        CREATE TABLE application_documents (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            application_id INT UNSIGNED NOT NULL,
+            application_id INT NOT NULL,
             original_name VARCHAR(512) NOT NULL,
             stored_name VARCHAR(255) NOT NULL,
             mime_type VARCHAR(128) NOT NULL DEFAULT 'application/octet-stream',
@@ -100,7 +105,6 @@ async function ensureDocumentsTable() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 }
-
 async function applicationExists(applicationId) {
     const [rows] = await db.query('SELECT id FROM applications WHERE id = ?', [applicationId]);
     return rows.length > 0;

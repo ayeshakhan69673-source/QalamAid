@@ -11,10 +11,11 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME || process.env.MYSQLDATABASE,
   waitForConnections: true,
   connectionLimit: 10,
- ssl: {
-  ca: require('fs').readFileSync(require('path').join(__dirname, 'certs', 'aiven-ca.pem')),
-  rejectUnauthorized: true
-}
+  enableKeepAlive: true,
+  ssl: {
+    minVersion: 'TLSv1.2',
+    rejectUnauthorized: true
+  }
 });
 
 module.exports = pool.promise();
