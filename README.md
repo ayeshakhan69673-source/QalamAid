@@ -68,4 +68,4 @@ It was built as my **Final Year Project** at the University of Gujrat.
 
 ## 📬 Contact
 
-[LinkedIn](https://www.linkedin.com/in/ayesha-khan-6056992b1/) · [GitHub](https://github.com/ayeshakhan69673-source)
+[LinkedIn](https://www.linkedin.com/in/ayesha-khan-dev/) · [GitHub](https://github.com/ayeshakhan69673-source)
